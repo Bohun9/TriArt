@@ -1,7 +1,7 @@
 import cv2 as cv
 import numpy as np
 from numba import njit, prange
-from bounding_box import BoundingBox
+from .bounding_box import BoundingBox
 
 ALPHA = 0.6
 
@@ -26,7 +26,7 @@ def paint_triangle(image, triangle, image_origin):
     height, width, _ = image.shape
     bounding_box = triangle.bounding_box()
     bounding_box -= image_origin
-    bounding_box.intersect_in_place(BoundingBox((0, 0), (width, height)))
+    bounding_box.intersect(BoundingBox((0, 0), (width, height)))
     if bounding_box.is_empty():
         return image
     vertices = triangle.vertices()

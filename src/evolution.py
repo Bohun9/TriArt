@@ -5,9 +5,10 @@ import queue
 import threading
 import pickle
 import copy
-import target_image
-from thread_local_data import thread_local
-from individual import Individual
+from . import target_image
+from . import triangle
+from .thread_local_data import thread_local
+from .individual import Individual
 
 POPULATION_SIZE = 20
 OFFSPRING_SIZE = 50

@@ -4,11 +4,11 @@ class BoundingBox:
     def __init__(self, c1, c2):
         self.points = np.array([c1, c2], dtype=np.int64)
 
-    def unite_in_place(self, box):
+    def unite(self, box):
         self.points[0] = np.minimum(self.points[0], box.points[0])
         self.points[1] = np.maximum(self.points[1], box.points[1])
 
-    def intersect_in_place(self, box):
+    def intersect(self, box):
         self.points[0] = np.maximum(self.points[0], box.points[0])
         self.points[1] = np.minimum(self.points[1], box.points[1])
 

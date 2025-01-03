@@ -1,7 +1,7 @@
 import sys
 import cv2 as cv
 import os
-import evolution
+from . import evolution
 
 if len(sys.argv) < 2:
     sys.exit(f"usage: python3 {sys.argv[0]} <image_path> [<population_path>]")

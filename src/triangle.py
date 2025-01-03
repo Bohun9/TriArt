@@ -1,7 +1,7 @@
 import numpy as np
-from thread_local_data import thread_local
-from bounding_box import BoundingBox
-import target_image
+from . import target_image
+from .thread_local_data import thread_local
+from .bounding_box import BoundingBox
 
 TRIANGLE_SAMPLE_SIZE = 50
 PROBABILITY_AVERAGE_SAMPLE = 0.5

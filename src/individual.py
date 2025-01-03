@@ -1,11 +1,11 @@
 import copy
 import numpy as np
 import cv2 as cv
-import image
-from thread_local_data import thread_local
-from bounding_box import BoundingBox
-from triangle import Triangle
-import target_image
+from . import image
+from . import target_image
+from .thread_local_data import thread_local
+from .bounding_box import BoundingBox
+from .triangle import Triangle
 
 ASSERTIONS = False
 PROBABILITY_MOVE_TRIANGLE = 0.8
@@ -55,8 +55,8 @@ class Individual:
 
     def recompute_fitness_from_parent(self, mutated_triangles, index):
         bounding_box = self.triangles[index].bounding_box()
-        bounding_box.unite_in_place(mutated_triangles[index].bounding_box())
-        bounding_box.intersect_in_place(BoundingBox((0, 0), (target_image.width, target_image.height)))
+        bounding_box.unite(mutated_triangles[index].bounding_box())
+        bounding_box.intersect(BoundingBox((0, 0), (target_image.width, target_image.height)))
 
         if bounding_box.is_empty():
             return self.fitness
