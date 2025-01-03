@@ -1,24 +1,24 @@
 import cv2 as cv
 import numpy as np
-from numba import njit, prange
+# from numba import njit, prange
 from .bounding_box import BoundingBox
 
 ALPHA = 0.6
 
-# def extract_triangle_area(image, p1, p2):
-#     return image[p1[1]:p2[1], p1[0]:p2[0], :].copy()
-
-@njit(parallel=True, fastmath=True)
 def extract_triangle_area(image, p1, p2):
-    height = p2[1] - p1[1]
-    width = p2[0] - p1[0]
-    area = np.empty((height, width, 3), dtype=np.uint8)
-    for y in prange(height):
-        for x in range(width):
-            area[y, x] = image[p1[1] + y, p1[0] + x]
-    return area
+    return image[p1[1]:p2[1], p1[0]:p2[0], :].copy()
 
-@njit(parallel=True, fastmath=True)
+# @njit(parallel=True, fastmath=True)
+# def extract_triangle_area(image, p1, p2):
+#     height = p2[1] - p1[1]
+#     width = p2[0] - p1[0]
+#     area = np.empty((height, width, 3), dtype=np.uint8)
+#     for y in prange(height):
+#         for x in range(width):
+#             area[y, x] = image[p1[1] + y, p1[0] + x]
+#     return area
+
+# @njit(parallel=True, fastmath=True)
 def alpha_blend(image, overlay, p1, p2):
     image[p1[1]:p2[1], p1[0]:p2[0], :] = (1 - ALPHA) * image[p1[1]:p2[1], p1[0]:p2[0], :] + ALPHA * overlay
 

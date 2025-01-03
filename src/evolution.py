@@ -3,10 +3,10 @@ import time
 import cv2 as cv
 import queue
 import threading
+import multiprocessing
 import pickle
 import copy
 from . import target_image
-from . import triangle
 from .thread_local_data import thread_local
 from .individual import Individual
 
@@ -16,14 +16,23 @@ MAX_GENERATIONS = 10000
 GENERATIONS_PER_SHAPE = 20
 GENERATIONS_PER_SAVE = 100
 MAX_NUMER_OF_SHAPES = 500
-NUM_THREADS = 2
+NUM_WORKERS = 4
 ESCAPE_KEY = 27
+USE_THREADS = False
 
 def generate_rng():
     seed = threading.get_ident() + int(time.time() * 1000)
     return np.random.default_rng(seed=seed)
 
 thread_local.rng = generate_rng()
+
+def process_worker(parents):
+    thread_local.rng = generate_rng()
+    children = []
+    for parent in parents:
+        child = parent.mutate()
+        children.append(child)
+    return children
 
 def evolve(image, image_name, population_path):
     target_image.image = image
@@ -54,31 +63,45 @@ def evolve(image, image_name, population_path):
         parent_probabilites = parent_probabilites.max() - parent_probabilites + 1
         parent_probabilites /= parent_probabilites.sum()
 
-        offspring = queue.Queue(maxsize=OFFSPRING_SIZE)
+        parents = np.array([thread_local.rng.choice(population, p=parent_probabilites) for  _ in range(OFFSPRING_SIZE)])
+        parents_chunks = []
+        chunk_start = 0
+        for i in range(NUM_WORKERS):
+            size = OFFSPRING_SIZE // NUM_WORKERS + (1 if i < OFFSPRING_SIZE % NUM_WORKERS else 0)
+            parents_chunks.append(parents[chunk_start:chunk_start + size])
+            chunk_start += size
 
-        def worker(num_children):
-            thread_local.rng = generate_rng()
-            for _ in range(num_children):
-                parent = thread_local.rng.choice(population, p=parent_probabilites)
-                child = parent.mutate()
-                offspring.put(child)
+        if USE_THREADS:
+            offspring = queue.Queue(maxsize=OFFSPRING_SIZE)
 
-        threads = []
-        for i in range(NUM_THREADS):
-            num_children = OFFSPRING_SIZE // NUM_THREADS + (1 if i < OFFSPRING_SIZE % NUM_THREADS else 0)
-            thread = threading.Thread(target=worker, args=(num_children,))
-            threads.append(thread)
-            thread.start()
+            def thread_worker(parents):
+                thread_local.rng = generate_rng()
+                for parent in parents:
+                    child = parent.mutate()
+                    offspring.put(child)
 
-        for thread in threads:
-            thread.join()
+            threads = []
+            for i in range(NUM_WORKERS):
+                num_children = OFFSPRING_SIZE // NUM_WORKERS + (1 if i < OFFSPRING_SIZE % NUM_WORKERS else 0)
+                thread = threading.Thread(target=thread_worker, args=(parents_chunks[i],))
+                threads.append(thread)
+                thread.start()
 
-        candidates = population
-        while not offspring.empty():
-            candidates.append(offspring.get())
-        assert (len(candidates) == POPULATION_SIZE + OFFSPRING_SIZE)
-        candidates.sort(key=lambda x: x.fitness)
-        population = candidates[:POPULATION_SIZE]
+            for thread in threads:
+                thread.join()
+
+            while not offspring.empty():
+                population.append(offspring.get())
+        else:
+            with multiprocessing.Pool(NUM_WORKERS) as pool:
+                offspring = pool.map(process_worker, parents_chunks)
+
+            for group in offspring: 
+                population.extend(group)
+
+        assert (len(population) == POPULATION_SIZE + OFFSPRING_SIZE)
+        population.sort(key=lambda x: x.fitness)
+        population = population[:POPULATION_SIZE]
 
         end_time = time.time()
         elapsed_time = end_time - start_time
