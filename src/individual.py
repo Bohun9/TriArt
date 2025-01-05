@@ -7,12 +7,10 @@ from .thread_local_data import thread_local
 from .bounding_box import BoundingBox
 from .triangle import Triangle
 
-ASSERTIONS = False
+ASSERTIONS = False # works only with custom rasterizer
 PROBABILITY_MOVE_TRIANGLE = 0.98
 PROBABILITY_REPLACE_TRIANGLE = 0.2
-EXPECTED_NUMBER_OF_SHAPES = 200
 
-@staticmethod
 def paint(triangles, background=None):
     return image.paint_triangles(triangles, target_image.height, target_image.width, background=background)
 
@@ -23,28 +21,16 @@ class Individual:
     def __init__(self, triangles=None, fitness=None):
         self.triangles = triangles if triangles is not None else []
         self.fitness = fitness if fitness is not None else self.compute_fitness()
-        # if ASSERTIONS:
-            # doesn't always work
-            # assert (self.fitness == self.compute_fitness())
+        if ASSERTIONS:
+            assert (self.fitness == self.compute_fitness())
 
     def paint(self, background=None):
         return paint(self.triangles, background)
-        # return image.paint_triangles(self.triangles, target_image.height, target_image.width, background=background)
 
     def compute_fitness(self):
         return compute_fitness(self.paint())
-        # return image.compute_squared_error(self.paint(), target_image.image)
 
     def add_random_triangle(self, focus_mode, target_pixels):
-        # mutated_triangles = copy.copy(self.triangles)
-        # mutated_triangles.append(Triangle.random_triangle(focus_mode, target_pixels))
-        # self.fitness = self.recompute_fitness_from_parent(mutated_triangles, len(self.triangles))
-        # self.triangles = mutated_triangles
-        # self.fitness = self.fitness if self.fitness is not None else self.compute_fitness()
-        # print(int(self.fitness) - int(self.compute_fitness()))
-        # print(self.fitness, self.compute_fitness())
-        # assert(self.fitness == self.compute_fitness())
-
         mutated_triangles = copy.copy(self.triangles)
 
         best = (1e18, None)
@@ -77,7 +63,7 @@ class Individual:
             if thread_local.rng.random() < PROBABILITY_REPLACE_TRIANGLE:
                 mutated_triangles[index] = Triangle.random_triangle(focus_mode, target_pixels)
             else:
-                mutated_triangles[index].adjust_vertices(focus_mode, target_pixels, len(self.triangles) / EXPECTED_NUMBER_OF_SHAPES)
+                mutated_triangles[index].adjust_vertices(focus_mode, target_pixels)
                 if thread_local.rng.random() < 0.6:
                     mutated_triangles[index].change_color(focus_mode, target_pixels)
         else:
@@ -104,13 +90,5 @@ class Individual:
         bounded_old_fitness, old_triangle_area = compute_bounded_fitness(self.triangles)
         bounded_new_fitness, _ = compute_bounded_fitness(mutated_triangles)
         new_fitness = self.fitness + bounded_new_fitness - bounded_old_fitness 
-
-        # sometimes opencv draws different edges when canvas is shifted
-        # if ASSERTIONS:
-        #     img1 = self.paint()[c1[1]:c2[1], c1[0]:c2[0], :]
-        #     img2 = old_triangle_area
-        #     if np.array_equal(img1, img2) == False:
-        #         cv.imwrite("debug.png", img1 - img2)
-        #     assert (np.array_equal(img1, img2))
 
         return new_fitness

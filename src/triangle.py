@@ -35,11 +35,19 @@ class Triangle:
         points[1] = points[0] + (thread_local.rng.integers(-d, d), thread_local.rng.integers(-d, d))
         points[2] = points[0] + (thread_local.rng.integers(-d, d), thread_local.rng.integers(-d, d))
         color = Triangle.generate_color(points, focus_mode, target_pixels)
-        return cls(points, color)
+        triangle = cls(points, color)
+        triangle.fix_orientation()
+        return triangle 
 
     def __repr__(self):
         points = ', '.join(f'({x}, {y})' for x, y in self.points)
         return f"Triangle(points={points}, color={self.color})"
+
+    def fix_orientation(self):
+        u = self.points[1] - self.points[0]
+        v = self.points[2] - self.points[0]
+        if u[0] * v[1] - u[1] * v[0] < 0:
+            self.points[0], self.points[1] = self.points[1], self.points[0]
 
     @staticmethod
     def project_into_canvas(points, height, width):
@@ -48,13 +56,14 @@ class Triangle:
         points[0] = project_into_range(points[0], x_low, x_high)
         points[1] = project_into_range(points[1], y_low, y_high)
 
-    def adjust_vertices(self, focus_mode, target_pixels, evolution_point):
+    def adjust_vertices(self, focus_mode, target_pixels):
         d = thread_local.rng.choice([10, 50], p=[0.5, 0.5]) if focus_mode else thread_local.rng.choice([50, 500], p=[0.5, 0.5])
         index = thread_local.rng.integers(0, 3)
         dx = thread_local.rng.integers(-d, d + 1)
         dy = thread_local.rng.integers(-d, d + 1)
         self.points[index] += (dx, dy)
         Triangle.project_into_canvas(self.points[index], target_image.height, target_image.width)
+        self.fix_orientation()
 
     def vertices(self):
         return self.points.copy()

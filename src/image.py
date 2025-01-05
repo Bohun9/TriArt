@@ -4,13 +4,65 @@ from numba import njit
 from . import target_image
 from .bounding_box import BoundingBox
 
-ALPHA = 0.3
-
 def extract_triangle_area(image, p1, p2):
     return image[p1[1]:p2[1], p1[0]:p2[0], :].copy()
 
 def alpha_blend(image, overlay, p1, p2):
     image[p1[1]:p2[1], p1[0]:p2[0], :] = (1 - target_image.alpha) * image[p1[1]:p2[1], p1[0]:p2[0], :] + target_image.alpha * overlay
+
+@njit
+def cross_product(u, v):
+    return u[0] * v[1] - u[1] * v[0]
+
+@njit
+def orientation(a, b, c):
+    return cross_product(b - a, c - a)
+
+@njit
+def rasterise_triangle(image, points, color, c1, c2, alpha):
+    assert (orientation(points[0], points[1], points[2]) >= 0)
+    for y in range(c1[1], c2[1]):
+        for x in range(c1[0], c2[0]):
+            p = np.array((x, y), dtype=np.int64)
+            o1 = orientation(points[0], points[1], p)
+            o2 = orientation(points[1], points[2], p)
+            o3 = orientation(points[2], points[0], p)
+            if o1 >= 0 and o2 >= 0 and o3 >= 0:
+                image[y][x] = (1 - alpha) * image[y][x] + alpha * color
+
+@njit
+def rasterise_triangle2(image, points, color, c1, c2, alpha):
+    a01 = points[0][1] - points[1][1] 
+    a12 = points[1][1] - points[2][1]
+    a20 = points[2][1] - points[0][1]
+
+    b01 = points[1][0] - points[0][0]
+    b12 = points[2][0] - points[1][0]
+    b20 = points[0][0] - points[2][0]
+
+    f01_row = orientation(points[0], points[1], c1)
+    f12_row = orientation(points[1], points[2], c1)
+    f20_row = orientation(points[2], points[0], c1)
+
+    x_min, y_min = c1[0], c1[1]
+    x_max, y_max = c2[0], c2[1]
+
+    for y in range(y_min, y_max):
+        f01 = f01_row
+        f12 = f12_row
+        f20 = f20_row
+
+        for x in range(x_min, x_max):
+            if f01 | f12 | f20 >= 0:
+                image[y][x] = (1 - alpha) * image[y][x] + alpha * color
+
+            f01 += a01
+            f12 += a12
+            f20 += a20
+        
+        f01_row += b01
+        f12_row += b12
+        f20_row += b20
 
 def paint_triangle(image, triangle, image_origin):
     height, width, _ = image.shape
@@ -20,10 +72,14 @@ def paint_triangle(image, triangle, image_origin):
     if bounding_box.is_empty():
         return image
     vertices = triangle.vertices()
-    vertices -= bounding_box.corner1() + image_origin
-    triangle_image = extract_triangle_area(image, bounding_box.corner1(), bounding_box.corner2())
-    cv.fillPoly(triangle_image, [vertices], triangle.color)
-    alpha_blend(image, triangle_image, bounding_box.corner1(), bounding_box.corner2())
+
+    vertices -= image_origin
+    rasterise_triangle2(image, vertices, triangle.color, bounding_box.corner1(), bounding_box.corner2(), target_image.alpha)
+
+    # vertices -= bounding_box.corner1() + image_origin
+    # triangle_image = extract_triangle_area(image, bounding_box.corner1(), bounding_box.corner2())
+    # cv.fillPoly(triangle_image, [vertices], triangle.color)
+    # alpha_blend(image, triangle_image, bounding_box.corner1(), bounding_box.corner2())
 
 def paint_triangles(triangles, height, width, image_origin=(0, 0), background=None):
     image = np.zeros((height, width, 3), dtype=np.uint8) if background is None else background.copy()
@@ -73,18 +129,6 @@ def compute_target_pixels(image, target_image):
     y, x = np.unravel_index(sorted_indices, pixel_score.shape)
     res = np.column_stack((x, y))
 
-    # res_yx = np.column_stack((y, x))
-    # (x0, y0), (x1, y1) = square_coordinates(*res[0])
-    # print(res_yx[:10])
-    # print(pixel_score[res_yx[:10]])
-    # for i in range(100):
-    #     y, x = res_yx[i]
-    #     print(pixel_score[y][x], end=" ")
-    # print("")
-    # print("best")
-    # print(res[0])
-    # print(diff[y0:y1, x0:x1, :])
-
     return res
 
 def compute_target_pixels2(image, target_image):
@@ -107,28 +151,13 @@ def compute_target_pixels2(image, target_image):
         for x in range(0, width, step):
             x0, x1 = max(0, x - d), min(width, x + d)
             y0, y1 = max(0, y - d), min(height, y + d)
-            # square = diff[y0:y1, x0:x1, :]
-            # r_square = square[:, :, 2]
-            # g_square = square[:, :, 1]
-            # b_square = square[:, :, 0]
 
             sum = subsquare_sum(x0, y0, x1, y1)
-
-            # assert (sum[2] == r_square.sum())
-            # assert (sum[1] == g_square.sum())
-            # assert (sum[0] == b_square.sum())
 
             r_score = area - 2 * np.sign(diff[y][x][2]) * eps * sum[2]
             g_score = area - 2 * np.sign(diff[y][x][1]) * eps * sum[1]
             b_score = area - 2 * np.sign(diff[y][x][0]) * eps * sum[0]
 
-            # r_score = (d ** 2) * (eps ** 2) - 2 * np.sign(diff[y][x][2]) * eps * r_square.sum()
-            # g_score = (d ** 2) * (eps ** 2) - 2 * np.sign(diff[y][x][1]) * eps * g_square.sum()
-            # b_score = (d ** 2) * (eps ** 2) - 2 * np.sign(diff[y][x][0]) * eps * b_square.sum()
-
-            # r_score = ((r_square + (np.sign(diff[y][x][2]) * eps)) ** 2).sum() - ((r_square) ** 2).sum()
-            # g_score = ((g_square + (np.sign(diff[y][x][1]) * eps)) ** 2).sum() - ((g_square) ** 2).sum()
-            # b_score = ((b_square + (np.sign(diff[y][x][0]) * eps)) ** 2).sum() - ((b_square) ** 2).sum()
             pixel_score[y][x] = min(0, r_score) + min(0, g_score) + min(0, b_score)
 
     sorted_indices = np.argsort(pixel_score.ravel())
@@ -164,13 +193,6 @@ def compute_target_pixels3(image, target_image):
             g_score = const - 2 * np.sign(diff[y][x][1]) * eps * sum[1]
             b_score = const - 2 * np.sign(diff[y][x][0]) * eps * sum[0]
 
-            # r_score = (d ** 2) * (eps ** 2) - 2 * np.sign(diff[y][x][2]) * eps * r_square.sum()
-            # g_score = (d ** 2) * (eps ** 2) - 2 * np.sign(diff[y][x][1]) * eps * g_square.sum()
-            # b_score = (d ** 2) * (eps ** 2) - 2 * np.sign(diff[y][x][0]) * eps * b_square.sum()
-
-            # r_score = ((r_square + (np.sign(diff[y][x][2]) * eps)) ** 2).sum() - ((r_square) ** 2).sum()
-            # g_score = ((g_square + (np.sign(diff[y][x][1]) * eps)) ** 2).sum() - ((g_square) ** 2).sum()
-            # b_score = ((b_square + (np.sign(diff[y][x][0]) * eps)) ** 2).sum() - ((b_square) ** 2).sum()
             pixel_score[yi][xi] = min(0, r_score) + min(0, g_score) + min(0, b_score)
 
     sorted_indices = np.argsort(pixel_score.ravel())
