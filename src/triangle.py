@@ -4,12 +4,7 @@ from .thread_local_data import thread_local
 from .bounding_box import BoundingBox
 
 TRIANGLE_SAMPLE_SIZE = 50
-PROBABILITY_AVERAGE_SAMPLE = 0.5
-COLOR_PERTURBATION = 30
-HEIGHT_START_PERTURBATION = 80
-HEIGHT_FINAL_PERTURBATION = 40
-WIDTH_START_PERTURBATION = 80
-WIDTH_FINAL_PERTURBATION = 40
+PROBABILITY_AVERAGE_SAMPLE = 0.7
 X_PADDING = 100
 Y_PADDING = 100
 
@@ -27,29 +22,24 @@ class Triangle:
         self.color = color
 
     @classmethod
-    def random_triangle(cls):
+    def random_triangle(cls, focus_mode, target_pixels):
         points = np.empty((3, 2), dtype=np.int64)
-        points[0][0] = thread_local.rng.integers(0, target_image.width)
-        points[0][1] = thread_local.rng.integers(0, target_image.height)
-        points[1] = points[0] + (thread_local.rng.integers(-50, 50), thread_local.rng.integers(-50, 50))
-        points[2] = points[0] + (thread_local.rng.integers(-50, 50), thread_local.rng.integers(-50, 50))
-        color = Triangle.generate_color(points)
+        if target_pixels is not None:
+            index = thread_local.rng.integers(0, target_pixels.shape[0])
+            points[0] = target_pixels[index]
+            # assert focus_mode
+        else:
+            points[0][0] = thread_local.rng.integers(0, target_image.width)
+            points[0][1] = thread_local.rng.integers(0, target_image.height)
+        d = thread_local.rng.choice([10, 50], p=[0.5, 0.5]) if focus_mode else 50
+        points[1] = points[0] + (thread_local.rng.integers(-d, d), thread_local.rng.integers(-d, d))
+        points[2] = points[0] + (thread_local.rng.integers(-d, d), thread_local.rng.integers(-d, d))
+        color = Triangle.generate_color(points, focus_mode, target_pixels)
         return cls(points, color)
 
     def __repr__(self):
-        return f"Triangle(points={self.points}, color={self.color})"
-
-    @staticmethod
-    def compute_current_perturbation(evolution_point, a, b):
-        if thread_local.rng.random() < 0.5:
-            return 400
-        else:
-            return 50
-        # assert b <= a
-        # assert (0.0 <= evolution_point and evolution_point <= 1.0)
-        # res = int(a * (b / a) ** evolution_point)
-        # assert (b <= res and res <= a)
-        # return res
+        points = ', '.join(f'({x}, {y})' for x, y in self.points)
+        return f"Triangle(points={points}, color={self.color})"
 
     @staticmethod
     def project_into_canvas(points, height, width):
@@ -58,14 +48,11 @@ class Triangle:
         points[0] = project_into_range(points[0], x_low, x_high)
         points[1] = project_into_range(points[1], y_low, y_high)
 
-    def adjust_vertices(self, evolution_point):
-        height_perturbation = Triangle.compute_current_perturbation(evolution_point, HEIGHT_START_PERTURBATION, HEIGHT_FINAL_PERTURBATION)
-        width_perturbation = Triangle.compute_current_perturbation(evolution_point, WIDTH_START_PERTURBATION, WIDTH_FINAL_PERTURBATION)
-        height_delta = thread_local.rng.integers(0, height_perturbation)
-        width_delta = thread_local.rng.integers(0, width_perturbation)
+    def adjust_vertices(self, focus_mode, target_pixels, evolution_point):
+        d = thread_local.rng.choice([10, 50], p=[0.5, 0.5]) if focus_mode else thread_local.rng.choice([50, 500], p=[0.5, 0.5])
         index = thread_local.rng.integers(0, 3)
-        dx = thread_local.rng.integers(-width_delta, width_delta + 1)
-        dy = thread_local.rng.integers(-height_delta, height_delta + 1)
+        dx = thread_local.rng.integers(-d, d + 1)
+        dy = thread_local.rng.integers(-d, d + 1)
         self.points[index] += (dx, dy)
         Triangle.project_into_canvas(self.points[index], target_image.height, target_image.width)
 
@@ -98,8 +85,11 @@ class Triangle:
         assert (average.shape == (3,))
         return average
 
+    def average_color_of_sample(self):
+        return Triangle.compute_average_color_of_sample(self.points)
+
     @staticmethod
-    def average_color_of_sample(points):
+    def compute_average_color_of_sample(points):
         rnd_points = Triangle.random_points_inside_triangle(points, TRIANGLE_SAMPLE_SIZE)
         for i in range(TRIANGLE_SAMPLE_SIZE):
             rnd_points[i][0] = project_into_range(rnd_points[i][0], 0, target_image.width - 1)
@@ -107,24 +97,24 @@ class Triangle:
         return Triangle.average_color_of_points(rnd_points)
 
     @staticmethod
-    def generate_color(points):
-        return Triangle.color_perturbation(Triangle.average_color_of_sample(points))
+    def generate_color(points, focus_mode, target_pixels):
+        return Triangle.color_perturbation(Triangle.compute_average_color_of_sample(points), focus_mode, target_pixels)
 
     @staticmethod
-    def color_perturbation(color):
-        delta = thread_local.rng.integers(0, COLOR_PERTURBATION)
+    def color_perturbation(color, focus_mode, target_pixels):
+        d = 10 if focus_mode else 30
         for i in range(3):
             if thread_local.rng.random() < 0.5:
                 continue
-            color[i] += thread_local.rng.integers(-delta, delta + 1)
+            color[i] += thread_local.rng.integers(-d, d + 1)
             color[i] = project_into_range(color[i], 0, 255)
         return color
 
-    def change_color(self):
+    def change_color(self, focus_mode, target_pixels):
         if thread_local.rng.random() < PROBABILITY_AVERAGE_SAMPLE:
-            self.color = Triangle.generate_color(self.points)
+            self.color = Triangle.generate_color(self.points, focus_mode, target_pixels)
         else:
-            Triangle.color_perturbation(self.color)
+            Triangle.color_perturbation(self.color, focus_mode, target_pixels)
 
     def bounding_box(self):
         return BoundingBox((self.points[:, 0].min(), self.points[:, 1].min()), (self.points[:, 0].max(), self.points[:, 1].max()))

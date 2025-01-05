@@ -1,17 +1,26 @@
 import sys
 import cv2 as cv
 import os
+import argparse
 from . import evolution
 
-if len(sys.argv) < 2:
-    sys.exit(f"usage: python3 {sys.argv[0]} <image_path> [<population_path>]")
+parser = argparse.ArgumentParser(description="TriArt: Generate artwork using evolutionary algorithms.")
 
-image_path = sys.argv[1]
-image_name = os.path.splitext(os.path.basename(image_path))[0]
-population_path = sys.argv[2] if len(sys.argv) == 3 else None
+parser.add_argument("target_image", type=str, help="Path to the target image.")
+parser.add_argument("--save_name", type=str, default=None, help="Prefix of the population file name.")
+parser.add_argument("--population", type=int, default=None, help="ID of the population.")
+parser.add_argument("--alpha", type=float, default=0.6, help="Alpha parameter.")
+parser.add_argument("-debug", default=False, help="Shows targeted pixels and recently added triangles.", action="store_true")
+parser.add_argument("-record", default=False, help="Record frames.", action="store_true")
+parser.add_argument("-save_all", default=False, help="Saves all generations.", action="store_true")
 
-target_image = cv.imread(image_path)
+args = parser.parse_args()
+
+if args.save_name is None:
+    args.save_name = os.path.splitext(os.path.basename(args.target_image))[0]
+
+target_image = cv.imread(args.target_image)
 if target_image is None:
     sys.exit("could not read the image")
 
-evolution.evolve(target_image, image_name, population_path)
+evolution.evolve(target_image, args.save_name, generation_index=args.population, record=args.record, save_all=args.save_all, debug=args.debug, alpha=args.alpha)
