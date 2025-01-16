@@ -11,8 +11,13 @@ ASSERTIONS = False # works only with custom rasterizer
 PROBABILITY_MOVE_TRIANGLE = 0.98
 PROBABILITY_REPLACE_TRIANGLE = 0.2
 
-def paint(triangles, background=None):
-    return image.paint_triangles(triangles, target_image.height, target_image.width, background=background)
+def paint_shapes(shapes, height=None, width=None, image_origin=(0, 0), background=None):
+    height = height if height is not None else target_image.height
+    width = width if width is not None else target_image.width
+    image = np.zeros((height, width, 3), dtype=np.uint8) if background is None else background.copy()
+    for shape in shapes:
+        shape.paint(image, image_origin)
+    return image
 
 def compute_fitness(painted_image):
     return image.compute_squared_error(painted_image, target_image.image)
@@ -25,7 +30,7 @@ class Individual:
             assert (self.fitness == self.compute_fitness())
 
     def paint(self, background=None):
-        return paint(self.triangles, background)
+        return paint_shapes(self.triangles, background=background)
 
     def compute_fitness(self):
         return compute_fitness(self.paint())
@@ -83,7 +88,7 @@ class Individual:
             return None
 
         def compute_bounded_fitness(triangles):
-            img = image.paint_triangles(triangles, bounding_box.height(), bounding_box.width(), bounding_box.corner1())
+            img = paint_shapes(triangles, height=bounding_box.height(), width=bounding_box.width(), image_origin=bounding_box.corner1())
             bounded_fitness = image.compute_squared_error(img, bounding_box.get_region_of_image(target_image.image))
             return bounded_fitness, img
 

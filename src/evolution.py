@@ -63,7 +63,7 @@ def evolve(image, save_name, generation_index=None, record=False, save_all=False
 
         focus_mode = num_triangles > 40
         if generation_index % GENERATIONS_PER_SHAPE == 0:
-            target_pixels = compute_target_pixels4(population[0].paint(), target_image.image)[:100]
+            target_pixels = compute_target_pixels4(population[0].paint(), target_image.image)[:200]
 
         if generation_index % GENERATIONS_PER_SHAPE == 0 and num_triangles < MAX_NUMER_OF_SHAPES:
             num_triangles += 1

@@ -4,12 +4,6 @@ from numba import njit
 from . import target_image
 from .bounding_box import BoundingBox
 
-def extract_triangle_area(image, p1, p2):
-    return image[p1[1]:p2[1], p1[0]:p2[0], :].copy()
-
-def alpha_blend(image, overlay, p1, p2):
-    image[p1[1]:p2[1], p1[0]:p2[0], :] = (1 - target_image.alpha) * image[p1[1]:p2[1], p1[0]:p2[0], :] + target_image.alpha * overlay
-
 @njit
 def cross_product(u, v):
     return u[0] * v[1] - u[1] * v[0]
@@ -63,29 +57,6 @@ def rasterise_triangle2(image, points, color, c1, c2, alpha):
         f01_row += b01
         f12_row += b12
         f20_row += b20
-
-def paint_triangle(image, triangle, image_origin):
-    height, width, _ = image.shape
-    bounding_box = triangle.bounding_box()
-    bounding_box -= image_origin
-    bounding_box.intersect(BoundingBox((0, 0), (width, height)))
-    if bounding_box.is_empty():
-        return image
-    vertices = triangle.vertices()
-
-    vertices -= image_origin
-    rasterise_triangle2(image, vertices, triangle.color, bounding_box.corner1(), bounding_box.corner2(), target_image.alpha)
-
-    # vertices -= bounding_box.corner1() + image_origin
-    # triangle_image = extract_triangle_area(image, bounding_box.corner1(), bounding_box.corner2())
-    # cv.fillPoly(triangle_image, [vertices], triangle.color)
-    # alpha_blend(image, triangle_image, bounding_box.corner1(), bounding_box.corner2())
-
-def paint_triangles(triangles, height, width, image_origin=(0, 0), background=None):
-    image = np.zeros((height, width, 3), dtype=np.uint8) if background is None else background.copy()
-    for triangle in triangles:
-        paint_triangle(image, triangle, image_origin)
-    return image
 
 def compute_squared_error(image1, image2):
     # return ((image1.astype(np.int64) - image2.astype(np.int64)) ** 2).sum()
@@ -213,7 +184,6 @@ def compute_target_pixels4(image, target_image):
     eps = 5
     d = 4
     step = 3
-    const = (d ** 2) * (eps ** 2)
 
     new_height = height // step
     new_width = width // step
@@ -230,9 +200,9 @@ def compute_target_pixels4(image, target_image):
 
             sum = diff_sum[y1][x1] - diff_sum[y0][x1] - diff_sum[y1][x0] + diff_sum[y0][x0]
 
-            r_score = const - 2 * np.sign(diff[y][x][2]) * eps * sum[2]
-            g_score = const - 2 * np.sign(diff[y][x][1]) * eps * sum[1]
-            b_score = const - 2 * np.sign(diff[y][x][0]) * eps * sum[0]
+            r_score = eps ** 2 * (x1 - x0) * (y1 - y0) - 2 * np.sign(diff[y][x][2]) * eps * sum[2]
+            g_score = eps ** 2 * (x1 - x0) * (y1 - y0) - 2 * np.sign(diff[y][x][1]) * eps * sum[1]
+            b_score = eps ** 2 * (x1 - x0) * (y1 - y0) - 2 * np.sign(diff[y][x][0]) * eps * sum[0]
 
             pixel_score[id] = min(0, r_score) + min(0, g_score) + min(0, b_score)
 
@@ -249,8 +219,7 @@ def compute_target_pixels4(image, target_image):
 def paint_points(pixels, background):
     image = background.copy()
     for (x, y) in pixels:
-        cv.circle(image, (x, y), 3, (0,0,255), -1)
-        # image[y][x] = (0, 0, 255)
+        cv.circle(image, (x, y), 2, (0, 0, 255), -1)
     return image
 
 def paint_edges_of_triangles(triangles, image, color):

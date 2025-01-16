@@ -1,7 +1,9 @@
 import numpy as np
+import cv2 as cv
 from . import target_image
 from .thread_local_data import thread_local
 from .bounding_box import BoundingBox
+from .image import rasterise_triangle2
 
 TRIANGLE_SAMPLE_SIZE = 50
 PROBABILITY_AVERAGE_SAMPLE = 0.7
@@ -65,9 +67,6 @@ class Triangle:
         Triangle.project_into_canvas(self.points[index], target_image.height, target_image.width)
         self.fix_orientation()
 
-    def vertices(self):
-        return self.points.copy()
-
     @staticmethod
     def random_point_inside_triangle(points):
         a = thread_local.rng.random()
@@ -128,3 +127,21 @@ class Triangle:
     def bounding_box(self):
         return BoundingBox((self.points[:, 0].min(), self.points[:, 1].min()), (self.points[:, 0].max(), self.points[:, 1].max()))
 
+    def paint(self, image, image_origin):
+        height, width, _ = image.shape
+        bounding_box = self.bounding_box()
+        bounding_box -= image_origin
+        bounding_box.intersect(BoundingBox((0, 0), (width, height)))
+        if bounding_box.is_empty():
+            return image
+        vertices = self.points.copy()
+
+        vertices -= image_origin
+        rasterise_triangle2(image, vertices, self.color, bounding_box.corner1(), bounding_box.corner2(), target_image.alpha)
+
+        # vertices -= bounding_box.corner1() + image_origin
+        # triangle_image = bounding_box.get_region_of_image(image).copy()
+        # cv.fillPoly(triangle_image, [vertices], self.color)
+        # c1 = bounding_box.corner1()
+        # c2 = bounding_box.corner2()
+        # image[c1[1]:c2[1], c1[0]:c2[0], :] = (1 - target_image.alpha) * bounding_box.get_region_of_image(image) + target_image.alpha * triangle_image
