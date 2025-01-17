@@ -6,16 +6,46 @@ import threading
 import multiprocessing
 import pickle
 import copy
+import sys
 from . import target_image
 from .thread_local_data import thread_local
 from .individual import Individual
-from .image import compute_target_pixels, compute_target_pixels2, compute_target_pixels3, compute_target_pixels4, absolute_difference, paint_points, paint_triangles, paint_edges_of_triangles
+from .image import compute_target_pixels, compute_target_pixels2, compute_target_pixels3, compute_target_pixels4, absolute_difference, paint_points, paint_edges_of_triangles
 
 GENERATIONS_PER_SHAPE = 15
 GENERATIONS_PER_SAVE = 100
 MAX_NUMER_OF_SHAPES = 500
 NUM_WORKERS = 4
 ESCAPE_KEY = 27
+
+class GenerationSaveData:
+    def __init__(self, min_fitness, avg_fitness, max_fitness, best_shapes, time):
+        self.min_fitness = min_fitness
+        self.avg_fitness = avg_fitness
+        self.max_fitness = max_fitness
+        self.best_shapes = best_shapes
+        self.time = time
+
+class EvolutionSaveData:
+    def __init__(self, save_name, alpha):
+        self.save_name = save_name
+        self.alpha = alpha
+        self.generations_per_shape = GENERATIONS_PER_SHAPE
+        self.generations = {}
+
+    @staticmethod
+    def load(save_name):
+        file_path = f"saved/{save_name}.pkl"
+        res = None
+        with open(file_path, "rb") as f:
+            res = pickle.load(f)
+        return res
+
+    def save(self):
+        file_path = f"saved/{self.save_name}.pkl"
+        with open(file_path, "wb") as f:
+            pickle.dump(self, f)
+        print(f"saved {file_path}")
 
 def generate_rng():
     seed = threading.get_ident() + int(time.time() * 1000)
@@ -34,27 +64,41 @@ def process_worker(parents):
         children.append(child)
     return children
 
-def evolve(image, save_name, generation_index=None, record=False, save_all=False, debug=False, use_threads=False, alpha=0.6, population_size=20, offspring_size=60, max_generations=None):
+def evolve(image, save_name, generation_index=None, display_mode="image", use_threads=False, alpha=0.6, population_size=20, offspring_size=60, max_generations=None):
     global focus_mode, target_pixels
 
-    print(f"starting evolution save_name={save_name} population_id={generation_index} record={record} save_all={save_all} alpha={alpha}")
+    print(f"starting evolution save_name={save_name} generation_id={generation_index} display_mode={display_mode} alpha={alpha}")
 
     target_image.set_target_image(image, alpha)
 
+    evolution_save_data = None
     starting_shapes = None
     num_triangles = 0
     if generation_index is None:
         generation_index = -1
+        evolution_save_data = EvolutionSaveData(save_name=save_name, alpha=alpha)
     else:
-        population_path = f"saved/{save_name}_{generation_index:05d}.pkl"
-        with open(population_path, "rb") as f:
-            starting_shapes = pickle.load(f)
-            num_triangles = len(starting_shapes)
-            print(f"loaded population from {population_path}")
-    generation_index += 1
+        evolution_save_data = EvolutionSaveData.load(save_name)
+        print("loaded population")
+        if generation_index not in evolution_save_data.generations:
+            sys.exit("invalid generation index")
+        if alpha != evolution_save_data.alpha:
+            sys.exit("alpha parameter should be the same as in the loaded run")
+        starting_shapes = evolution_save_data.generations[generation_index].best_shapes
+        num_triangles = len(starting_shapes)
 
     population = [Individual(triangles=copy.copy(starting_shapes)) for _ in range(population_size)]
     cv.namedWindow("Best Individual")
+
+    if generation_index == -1:
+        evolution_save_data.generations[generation_index] = GenerationSaveData(
+                min_fitness=population[0].fitness,
+                avg_fitness=population[0].fitness,
+                max_fitness=population[0].fitness,
+                best_shapes=population[0].triangles,
+                time=0
+        )
+    generation_index += 1
 
     max_generations = max_generations if max_generations is not None else MAX_NUMER_OF_SHAPES * GENERATIONS_PER_SHAPE
 
@@ -106,7 +150,9 @@ def evolve(image, save_name, generation_index=None, record=False, save_all=False
                 thread.join()
 
             while not offspring.empty():
-                population.append(offspring.get())
+                child = offspring.get()
+                population.append(child)
+                last_triangles_offspring.append(child.triangles[-1])
         else:
             with multiprocessing.Pool(NUM_WORKERS) as pool:
                 offspring = pool.map(process_worker, parents_chunks)
@@ -123,22 +169,20 @@ def evolve(image, save_name, generation_index=None, record=False, save_all=False
         end_time = time.time()
         elapsed_time = end_time - start_time
 
-        print(f"gen={generation_index} best={population[0].fitness:.3e} time={elapsed_time:.3f}sec size={num_triangles} max_prob={parent_probabilites[0]:2f}")
+        evolution_save_data.generations[generation_index] = GenerationSaveData(
+                min_fitness=population[0].fitness,
+                avg_fitness=np.average(np.array([ind.fitness for ind in population])),
+                max_fitness=population[-1].fitness,
+                best_shapes=population[0].triangles, 
+                time=elapsed_time
+        )
 
-        if save_all or generation_index % GENERATIONS_PER_SAVE == 0:
-            file_name = f"{save_name}_{generation_index:05d}.pkl"
-            file_path = f"saved/{file_name}"
-            with open(file_path, "wb") as f:
-                pickle.dump(population[0].triangles, f)
-            print(f"saved {file_name}")
+        start_time = time.time()
 
-        painted_image = population[0].paint()
-
-        if record:
-            file_name = f"frames/{save_name}_{generation_index:05d}.png"
-            cv.imwrite(file_name, painted_image)
-
-        if debug and target_pixels is not None:
+        if display_mode == "image":
+            cv.imshow("Best Individual", population[0].paint())
+        elif display_mode == "details" and target_pixels is not None:
+            painted_image = population[0].paint()
             target_pixels_image = paint_points(target_pixels, target_image.image)
             last_triangles_population = []
             for i in range(population_size):
@@ -148,13 +192,17 @@ def evolve(image, save_name, generation_index=None, record=False, save_all=False
             paint_edges_of_triangles(last_triangles_offspring, painted_image, (255, 0, 0))
             paint_edges_of_triangles(last_triangles_population, painted_image, (0, 0, 255))
             cv.imshow("Best Individual", np.hstack((painted_image, target_pixels_image)))
-        else:
-            cv.imshow("Best Individual", painted_image)
 
-        key = cv.waitKey(300)
+        end_time = time.time()
+        debug_time = end_time - start_time
+
+        print(f"gen={generation_index} best={population[0].fitness:.3e} time={elapsed_time:.3f} debug_time={debug_time:.3f}sec size={num_triangles} max_prob={parent_probabilites[0]:2f}")
+
+        key = cv.waitKey(20)
         if key == ESCAPE_KEY:
             break
 
         generation_index += 1
 
-cv.destroyAllWindows()
+    evolution_save_data.save()
+    cv.destroyAllWindows()

@@ -11,12 +11,13 @@ ASSERTIONS = False # works only with custom rasterizer
 PROBABILITY_MOVE_TRIANGLE = 0.98
 PROBABILITY_REPLACE_TRIANGLE = 0.2
 
-def paint_shapes(shapes, height=None, width=None, image_origin=(0, 0), background=None):
+def paint_shapes(shapes, height=None, width=None, image_origin=(0, 0), alpha=None, background=None):
     height = height if height is not None else target_image.height
     width = width if width is not None else target_image.width
+    alpha = alpha if alpha is not None else target_image.alpha
     image = np.zeros((height, width, 3), dtype=np.uint8) if background is None else background.copy()
     for shape in shapes:
-        shape.paint(image, image_origin)
+        shape.paint(image, image_origin, alpha)
     return image
 
 def compute_fitness(painted_image):

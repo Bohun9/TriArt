@@ -127,7 +127,7 @@ class Triangle:
     def bounding_box(self):
         return BoundingBox((self.points[:, 0].min(), self.points[:, 1].min()), (self.points[:, 0].max(), self.points[:, 1].max()))
 
-    def paint(self, image, image_origin):
+    def paint(self, image, image_origin, alpha):
         height, width, _ = image.shape
         bounding_box = self.bounding_box()
         bounding_box -= image_origin
@@ -137,7 +137,7 @@ class Triangle:
         vertices = self.points.copy()
 
         vertices -= image_origin
-        rasterise_triangle2(image, vertices, self.color, bounding_box.corner1(), bounding_box.corner2(), target_image.alpha)
+        rasterise_triangle2(image, vertices, self.color, bounding_box.corner1(), bounding_box.corner2(), alpha)
 
         # vertices -= bounding_box.corner1() + image_origin
         # triangle_image = bounding_box.get_region_of_image(image).copy()
