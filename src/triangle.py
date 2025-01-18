@@ -51,6 +51,11 @@ class Triangle:
         if u[0] * v[1] - u[1] * v[0] < 0:
             self.points[0], self.points[1] = self.points[1], self.points[0]
 
+    def area(self):
+        u = self.points[1] - self.points[0]
+        v = self.points[2] - self.points[0]
+        return np.abs(u[0] * v[1] - u[1] * v[0]) / 2
+
     @staticmethod
     def project_into_canvas(points, height, width):
         x_low, x_high = 0 - X_PADDING, width + X_PADDING
@@ -136,12 +141,12 @@ class Triangle:
             return image
         vertices = self.points.copy()
 
-        vertices -= image_origin
-        rasterise_triangle2(image, vertices, self.color, bounding_box.corner1(), bounding_box.corner2(), alpha)
+        # vertices -= image_origin
+        # rasterise_triangle2(image, vertices, self.color, bounding_box.corner1(), bounding_box.corner2(), alpha)
 
-        # vertices -= bounding_box.corner1() + image_origin
-        # triangle_image = bounding_box.get_region_of_image(image).copy()
-        # cv.fillPoly(triangle_image, [vertices], self.color)
-        # c1 = bounding_box.corner1()
-        # c2 = bounding_box.corner2()
-        # image[c1[1]:c2[1], c1[0]:c2[0], :] = (1 - target_image.alpha) * bounding_box.get_region_of_image(image) + target_image.alpha * triangle_image
+        vertices -= bounding_box.corner1() + image_origin
+        triangle_image = bounding_box.get_region_of_image(image).copy()
+        cv.fillPoly(triangle_image, [vertices], self.color)
+        c1 = bounding_box.corner1()
+        c2 = bounding_box.corner2()
+        image[c1[1]:c2[1], c1[0]:c2[0], :] = (1 - alpha) * bounding_box.get_region_of_image(image) + alpha * triangle_image

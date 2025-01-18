@@ -19,11 +19,12 @@ NUM_WORKERS = 4
 ESCAPE_KEY = 27
 
 class GenerationSaveData:
-    def __init__(self, min_fitness, avg_fitness, max_fitness, best_shapes, time):
+    def __init__(self, min_fitness, avg_fitness, max_fitness, best_shapes, avg_last_triangle_size, time):
         self.min_fitness = min_fitness
         self.avg_fitness = avg_fitness
         self.max_fitness = max_fitness
         self.best_shapes = best_shapes
+        self.avg_last_triangle_size = avg_last_triangle_size
         self.time = time
 
 class EvolutionSaveData:
@@ -96,6 +97,7 @@ def evolve(image, save_name, generation_index=None, display_mode="image", use_th
                 avg_fitness=population[0].fitness,
                 max_fitness=population[0].fitness,
                 best_shapes=population[0].triangles,
+                avg_last_triangle_size=0,
                 time=0
         )
     generation_index += 1
@@ -174,6 +176,7 @@ def evolve(image, save_name, generation_index=None, display_mode="image", use_th
                 avg_fitness=np.average(np.array([ind.fitness for ind in population])),
                 max_fitness=population[-1].fitness,
                 best_shapes=population[0].triangles, 
+                avg_last_triangle_size=np.average(np.array([ind.triangles[-1].area() for ind in population])),
                 time=elapsed_time
         )
 

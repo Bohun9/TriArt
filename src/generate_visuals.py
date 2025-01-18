@@ -7,9 +7,6 @@ from . import target_image
 from .evolution import EvolutionSaveData
 from .individual import paint_shapes
 
-# target_path = sys.argv[1]
-# run_name = sys.argv[2]
-
 def create_frames(target_path, run_name):
     data = EvolutionSaveData.load(run_name)
 
@@ -22,70 +19,107 @@ def create_frames(target_path, run_name):
             frame_path = f"frames/{data.save_name}_{gen_index:05d}.png"
             cv.imwrite(frame_path, painted_image)
 
-def create_graphs(target_path, run_name):
-    data = EvolutionSaveData.load(run_name)
+class Visualizer:
+    def __init__(self, run_name):
+        data = EvolutionSaveData.load(run_name)
 
-    target = cv.imread(target_path)
-    target_image.set_target_image(target, data.alpha)
+        self.data = data
+        self.min_fitness = []
+        self.avg_fitness = []
+        self.max_fitness = []
+        self.shape_fitness = []
+        self.generation_times = []
+        self.shape_times = []
+        self.avg_shape_sizes = []
 
-    min_fitness = []
-    avg_fitness = []
-    max_fitness = []
-    shape_fitness = []
+        for (gen_index, gen_data) in data.generations.items():
+            self.min_fitness.append(gen_data.min_fitness)
+            self.avg_fitness.append(gen_data.avg_fitness)
+            self.max_fitness.append(gen_data.max_fitness)
+            self.generation_times.append(gen_data.time)
+            if gen_index % data.generations_per_shape == data.generations_per_shape - 1:
+                self.shape_fitness.append(gen_data.min_fitness)
+                self.avg_shape_sizes.append(gen_data.avg_last_triangle_size)
 
-    for (gen_index, gen_data) in tqdm(data.generations.items()):
-        min_fitness.append(gen_data.min_fitness)
-        avg_fitness.append(gen_data.avg_fitness)
-        max_fitness.append(gen_data.max_fitness)
-        if gen_index % data.generations_per_shape == data.generations_per_shape - 1:
-            shape_fitness.append(gen_data.min_fitness)
+        def fitness(g):
+            return data.generations[g].min_fitness
 
-    def fitness(g):
-        return data.generations[g].min_fitness
+        self.generations_per_shape_weights = np.zeros(data.generations_per_shape)
+        i = 0
+        while i + data.generations_per_shape < len(self.min_fitness):
+            time_sum = 0
+            total = fitness(i - 1) - fitness(i + data.generations_per_shape - 1)
+            for j in range(data.generations_per_shape):
+                self.generations_per_shape_weights[j] += (fitness(i + j - 1) - fitness(i + j)) / total
+                time_sum += data.generations[i + j].time
+            self.shape_times.append(time_sum)
+            i += data.generations_per_shape
+        self.generations_per_shape_weights /= self.generations_per_shape_weights.sum()
 
-    generations_per_shape_weights = np.zeros(data.generations_per_shape)
-    i = 0
-    while i + data.generations_per_shape < len(min_fitness):
-        total = fitness(i - 1) - fitness(i + data.generations_per_shape - 1)
-        for j in range(data.generations_per_shape):
-            # if fitness(i + j - 1) < fitness(i + j):
-            #     print(i, j, fitness(i + j - 1), fitness(i + j), total, (fitness(i + j - 1) - fitness(i + j)) / total)
-            generations_per_shape_weights[j] += (fitness(i + j - 1) - fitness(i + j)) / total
-        i += data.generations_per_shape
-    print(generations_per_shape_weights)
-    generations_per_shape_weights /= generations_per_shape_weights.sum()
+    def draw_fitness_over_generations(self):
+        fig, ax = plt.subplots()
+        ax.plot(self.min_fitness, label="Min Fitness", color="green")
+        ax.set_yscale('log')
+        ax.set_xlabel("Generations")
+        ax.set_ylabel("Fitness")
+        ax.set_title("Fitness Over Generations (Log Scale)")
+        ax.legend()
+        ax.grid(True)
 
-    num_generations = len(min_fitness)
+    def draw_changes_of_fitness(self):
+        fig, ax = plt.subplots()
+        fitness_diff = -np.diff(self.shape_fitness)
+        batch_size = 7
+        batched_diff = [np.mean(fitness_diff[i:i + batch_size]) for i in range(0, len(fitness_diff), batch_size)]
+        ax.plot(batched_diff, marker='o', markersize=3, label=f"Average Δ (Batch Size={batch_size})")
+        ax.set_yscale('log')
+        ax.set_xlabel("Batch Id")
+        ax.set_ylabel("Change in Fitness")
+        ax.set_title("Consecutive Changes in Fitness Values Over the Number of Shapes")
+        ax.legend()
+        ax.grid(True)
 
-    fig1, ax1 = plt.subplots()
-    ax1.plot(range(num_generations), min_fitness, label="Min Fitness", color="green")
-    # ax1.plot(range(num_generations), avg_fitness, label="Avg Fitness", color="blue")
-    # ax1.plot(range(num_generations), max_fitness, label="Max Fitness", color="red")
-    ax1.set_yscale('log')
-    ax1.set_xlabel("Generations")
-    ax1.set_ylabel("Fitness")
-    ax1.set_title("Fitness Over Generations (Log Scale)")
-    ax1.legend()
-    ax1.grid(True)
+    def draw_fitness_contribution(self):
+        fig, ax = plt.subplots()
+        ax.bar(range(self.data.generations_per_shape), self.generations_per_shape_weights, color='blue')
+        ax.set_xlabel('Generation Id')
+        ax.set_ylabel('Percent of Fitness Improvement')
+        ax.set_title('Fitness Improvement Contribution per Shape Addition Generation')
+        ax.grid(True)
 
-    num_shapes = len(shape_fitness)
+    def draw_average_shape_area(self):
+        fig, ax = plt.subplots()
+        batch_size = 4
+        batched_avg_shape_sizes = [np.mean(self.avg_shape_sizes[i:i + batch_size]) for i in range(0, len(self.avg_shape_sizes), batch_size)]
+        ax.plot(batched_avg_shape_sizes, label=f"Average area (Batch Size={batch_size})")
+        ax.set_yscale('log')
+        ax.set_xlabel("Batch Id")
+        ax.set_ylabel("Average Shape Area")
+        ax.set_title("Average Shape Area of Added Triangle")
+        ax.legend()
+        ax.grid(True)
 
-    fig2, ax2 = plt.subplots()
-    ax2.plot(range(num_shapes), shape_fitness, label="Min Fitness", color="green")
-    # ax2.scatter(range(num_shapes), shape_fitness, color="red", zorder=4, s=1)
-    ax2.set_yscale('log')
-    ax2.set_xlabel("Number of Shapes")
-    ax2.set_ylabel("Fitness")
-    ax2.set_title("Fitness Over Number of Shapes (Log Scale)")
-    ax2.legend()
-    ax2.grid(True)
+    def draw_time_over_generations(self):
+        fig, ax = plt.subplots()
+        accum_times = np.add.accumulate(self.generation_times) / 60
+        ax.plot(accum_times)
+        ax.set_xlabel("Generations")
+        ax.set_ylabel("Time in Minutes")
+        ax.set_title("Time Over Generations")
+        ax.grid(True)
 
+    def draw_time_per_shape(self):
+        fig, ax = plt.subplots()
+        batch_size = 4
+        batched_shape_times = [np.mean(self.shape_times[i:i + batch_size]) for i in range(0, len(self.shape_times), batch_size)]
+        ax.plot(self.shape_times)
+        ax.set_xlabel("Number of Shapes Batch Id")
+        ax.set_ylabel("Time in Seconds")
+        ax.set_title("Time Per Shape (Batched)")
+        ax.grid(True)
 
-    fig3, ax3 = plt.subplots()
-    ax3.bar(range(data.generations_per_shape), generations_per_shape_weights, color='blue')
-    ax3.set_xlabel('Bar Number')
-    ax3.set_ylabel('Value')
-    ax3.set_title('Bar Plot of 15 Bars')
+if __name__ == "__main__":
+    target_path = sys.argv[1]
+    run_name = sys.argv[2]
 
-    return (fig1, fig2, fig3)
-
+    create_frames(target_path, run_name)

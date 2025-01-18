@@ -2,3 +2,4 @@ __pycache__/
 images/
 saved/
 frames/
+.ipynb_checkpoints/
