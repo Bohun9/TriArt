@@ -136,12 +136,15 @@ def create_frames(target_path, run_name, frame_id=None):
     data = EvolutionSaveData.load(run_name)
 
     target = cv.imread(target_path)
-    target_image.set_target_image(target, data.alpha)
+    target_image.set_target_image(target, data.params["alpha"])
 
     Path("frames/").mkdir(exist_ok=True)
 
+    print(frame_id)
+
     for (gen_index, gen_data) in tqdm(data.generations.items()):
         if gen_index >= 0 and (frame_id is None or gen_index == frame_id):
+            print(gen_index)
             painted_image = paint_shapes(gen_data.best_shapes)
             frame_path = f"frames/{data.params['save_name']}_{gen_index:05d}.png"
             cv.imwrite(frame_path, painted_image)
@@ -150,6 +153,6 @@ def create_frames(target_path, run_name, frame_id=None):
 if __name__ == "__main__":
     target_path = sys.argv[1]
     run_name = sys.argv[2]
-    frame_id = sys.argv[3] if len(sys.argv) == 4 else None
+    frame_id = int(sys.argv[3]) if len(sys.argv) == 4 else None
 
     create_frames(target_path, run_name, frame_id)
