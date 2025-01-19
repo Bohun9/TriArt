@@ -5,6 +5,7 @@ height = 0
 width = 0
 alpha = 0.0
 
+
 def set_target_image(target_image, target_alpha):
     global image, height, width, alpha
     image = target_image

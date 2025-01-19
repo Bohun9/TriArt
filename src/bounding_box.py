@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class BoundingBox:
     def __init__(self, c1, c2):
         self.points = np.array([c1, c2], dtype=np.int64)
@@ -25,8 +26,12 @@ class BoundingBox:
         return self.points[1]
 
     def get_region_of_image(self, image):
-        return image[self.points[0][1]:self.points[1][1], self.points[0][0]:self.points[1][0], :]
-    
+        return image[
+            self.points[0][1] : self.points[1][1],
+            self.points[0][0] : self.points[1][0],
+            :,
+        ]
+
     def __isub__(self, other):
         self.points[0] -= other
         self.points[1] -= other

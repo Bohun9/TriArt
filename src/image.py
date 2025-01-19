@@ -4,17 +4,20 @@ from numba import njit
 from . import target_image
 from .bounding_box import BoundingBox
 
+
 @njit
 def cross_product(u, v):
     return u[0] * v[1] - u[1] * v[0]
+
 
 @njit
 def orientation(a, b, c):
     return cross_product(b - a, c - a)
 
+
 @njit
 def rasterise_triangle(image, points, color, c1, c2, alpha):
-    assert (orientation(points[0], points[1], points[2]) >= 0)
+    assert orientation(points[0], points[1], points[2]) >= 0
     for y in range(c1[1], c2[1]):
         for x in range(c1[0], c2[0]):
             p = np.array((x, y), dtype=np.int64)
@@ -24,9 +27,10 @@ def rasterise_triangle(image, points, color, c1, c2, alpha):
             if o1 >= 0 and o2 >= 0 and o3 >= 0:
                 image[y][x] = (1 - alpha) * image[y][x] + alpha * color
 
+
 @njit
 def rasterise_triangle2(image, points, color, c1, c2, alpha):
-    a01 = points[0][1] - points[1][1] 
+    a01 = points[0][1] - points[1][1]
     a12 = points[1][1] - points[2][1]
     a20 = points[2][1] - points[0][1]
 
@@ -53,10 +57,11 @@ def rasterise_triangle2(image, points, color, c1, c2, alpha):
             f01 += a01
             f12 += a12
             f20 += a20
-        
+
         f01_row += b01
         f12_row += b12
         f20_row += b20
+
 
 def compute_squared_error(image1, image2):
     # return ((image1.astype(np.int64) - image2.astype(np.int64)) ** 2).sum()
@@ -65,121 +70,23 @@ def compute_squared_error(image1, image2):
     c = a * b
     return (c.astype(np.uint16) ** 2).sum()
 
+
 def absolute_difference(image1, image2):
     a = image1 - image2
     b = 254 * (image1 < image2).astype(np.uint8) + 1
     return a * b
 
-def compute_target_pixels(image, target_image):
-    height, width, _ = image.shape
-    diff = image.astype(np.int32) - target_image.astype(np.int32)
-    pixel_score = np.zeros((height, width), dtype=np.int32)
-    eps = 5
-    d = 4
-    step = 2
-
-    def square_coordinates(x, y):
-        x0, x1 = max(0, x - d), min(width, x + d)
-        y0, y1 = max(0, y - d), min(height, y + d)
-        return ((x0, y0), (x1, y1))
-
-    for y in range(0, height, step):
-        for x in range(0, width, step):
-            x0, x1 = max(0, x - d), min(width, x + d)
-            y0, y1 = max(0, y - d), min(height, y + d)
-            square = diff[y0:y1, x0:x1, :]
-            r_square = square[:, :, 2]
-            g_square = square[:, :, 1]
-            b_square = square[:, :, 0]
-            r_score = min(((r_square + eps) ** 2).sum(), ((r_square - eps) ** 2).sum()) - ((r_square) ** 2).sum()
-            g_score = min(((g_square + eps) ** 2).sum(), ((g_square - eps) ** 2).sum()) - ((g_square) ** 2).sum()
-            b_score = min(((b_square + eps) ** 2).sum(), ((b_square - eps) ** 2).sum()) - ((b_square) ** 2).sum()
-            pixel_score[y][x] = min(0, r_score) + min(0, g_score) + min(0, b_score)
-
-    sorted_indices = np.argsort(pixel_score.ravel())
-    y, x = np.unravel_index(sorted_indices, pixel_score.shape)
-    res = np.column_stack((x, y))
-
-    return res
-
-def compute_target_pixels2(image, target_image):
-    height, width, _ = image.shape
-    diff = image.astype(np.int32) - target_image.astype(np.int32)
-    sum = np.cumsum(np.cumsum(diff, axis=0), axis=1)
-    diff_sum = np.zeros((sum.shape[0] + 1, sum.shape[1] + 1, 3), dtype=sum.dtype)
-    diff_sum[1:, 1:, :] = sum
-    pixel_score = np.zeros((height, width), dtype=np.int32)
-
-    def subsquare_sum(x0, y0, x1, y1):
-        return diff_sum[y1][x1] - diff_sum[y0][x1] - diff_sum[y1][x0] + diff_sum[y0][x0]
-
-    eps = 5
-    d = 4
-    step = 3
-    area = (d ** 2) * (eps ** 2)
-
-    for y in range(0, height, step):
-        for x in range(0, width, step):
-            x0, x1 = max(0, x - d), min(width, x + d)
-            y0, y1 = max(0, y - d), min(height, y + d)
-
-            sum = subsquare_sum(x0, y0, x1, y1)
-
-            r_score = area - 2 * np.sign(diff[y][x][2]) * eps * sum[2]
-            g_score = area - 2 * np.sign(diff[y][x][1]) * eps * sum[1]
-            b_score = area - 2 * np.sign(diff[y][x][0]) * eps * sum[0]
-
-            pixel_score[y][x] = min(0, r_score) + min(0, g_score) + min(0, b_score)
-
-    sorted_indices = np.argsort(pixel_score.ravel())
-    y, x = np.unravel_index(sorted_indices, pixel_score.shape)
-    res = np.column_stack((x, y))
-
-    return res
-
-def compute_target_pixels3(image, target_image):
-    height, width, _ = image.shape
-    diff = image.astype(np.int32) - target_image.astype(np.int32)
-    sum = np.cumsum(np.cumsum(diff, axis=0), axis=1)
-    diff_sum = np.zeros((sum.shape[0] + 1, sum.shape[1] + 1, 3), dtype=sum.dtype)
-    diff_sum[1:, 1:, :] = sum
-
-    eps = 5
-    d = 4
-    step = 3
-    const = (d ** 2) * (eps ** 2)
-
-    pixel_score = np.zeros((height // step, width // step), dtype=np.int32)
-
-    for yi in range(0, height // step):
-        for xi in range(0, width // step):
-            x = step * xi
-            y = step * yi
-            x0, x1 = max(0, x - d), min(width, x + d)
-            y0, y1 = max(0, y - d), min(height, y + d)
-
-            sum = diff_sum[y1][x1] - diff_sum[y0][x1] - diff_sum[y1][x0] + diff_sum[y0][x0]
-
-            r_score = const - 2 * np.sign(diff[y][x][2]) * eps * sum[2]
-            g_score = const - 2 * np.sign(diff[y][x][1]) * eps * sum[1]
-            b_score = const - 2 * np.sign(diff[y][x][0]) * eps * sum[0]
-
-            pixel_score[yi][xi] = min(0, r_score) + min(0, g_score) + min(0, b_score)
-
-    sorted_indices = np.argsort(pixel_score.ravel())
-    y, x = np.unravel_index(sorted_indices, pixel_score.shape)
-    res = np.column_stack((step * x, step * y))
-
-    return res
 
 @njit
-def compute_target_pixels4(image, target_image):
+def compute_target_pixels(image, target_image):
     height, width, _ = image.shape
     diff = image.astype(np.int32) - target_image.astype(np.int32)
     diff_sum = np.zeros((height + 1, width + 1, 3), dtype=np.int64)
     for y in range(height):
         for x in range(width):
-            diff_sum[y + 1][x + 1] = diff[y][x] + diff_sum[y + 1][x] + diff_sum[y][x + 1] - diff_sum[y][x]
+            diff_sum[y + 1][x + 1] = (
+                diff[y][x] + diff_sum[y + 1][x] + diff_sum[y][x + 1] - diff_sum[y][x]
+            )
 
     eps = 5
     d = 4
@@ -198,11 +105,25 @@ def compute_target_pixels4(image, target_image):
             x0, x1 = max(0, x - d), min(width, x + d)
             y0, y1 = max(0, y - d), min(height, y + d)
 
-            sum = diff_sum[y1][x1] - diff_sum[y0][x1] - diff_sum[y1][x0] + diff_sum[y0][x0]
+            sum = (
+                diff_sum[y1][x1]
+                - diff_sum[y0][x1]
+                - diff_sum[y1][x0]
+                + diff_sum[y0][x0]
+            )
 
-            r_score = eps ** 2 * (x1 - x0) * (y1 - y0) - 2 * np.sign(diff[y][x][2]) * eps * sum[2]
-            g_score = eps ** 2 * (x1 - x0) * (y1 - y0) - 2 * np.sign(diff[y][x][1]) * eps * sum[1]
-            b_score = eps ** 2 * (x1 - x0) * (y1 - y0) - 2 * np.sign(diff[y][x][0]) * eps * sum[0]
+            r_score = (
+                eps**2 * (x1 - x0) * (y1 - y0)
+                - 2 * np.sign(diff[y][x][2]) * eps * sum[2]
+            )
+            g_score = (
+                eps**2 * (x1 - x0) * (y1 - y0)
+                - 2 * np.sign(diff[y][x][1]) * eps * sum[1]
+            )
+            b_score = (
+                eps**2 * (x1 - x0) * (y1 - y0)
+                - 2 * np.sign(diff[y][x][0]) * eps * sum[0]
+            )
 
             pixel_score[id] = min(0, r_score) + min(0, g_score) + min(0, b_score)
 
@@ -216,11 +137,13 @@ def compute_target_pixels4(image, target_image):
 
     return res
 
+
 def paint_points(pixels, background):
     image = background.copy()
     for (x, y) in pixels:
         cv.circle(image, (x, y), 2, (0, 0, 255), -1)
     return image
+
 
 def paint_edges_of_triangles(triangles, image, color):
     for triangle in triangles:

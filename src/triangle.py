@@ -10,6 +10,7 @@ PROBABILITY_AVERAGE_SAMPLE = 0.7
 X_PADDING = 100
 Y_PADDING = 100
 
+
 def project_into_range(x, a, b):
     assert a <= b
     if x < a:
@@ -17,6 +18,7 @@ def project_into_range(x, a, b):
     if x > b:
         return b
     return x
+
 
 class Triangle:
     def __init__(self, points, color):
@@ -34,15 +36,21 @@ class Triangle:
             points[0][0] = thread_local.rng.integers(0, target_image.width)
             points[0][1] = thread_local.rng.integers(0, target_image.height)
         d = thread_local.rng.choice([10, 50], p=[0.5, 0.5]) if focus_mode else 50
-        points[1] = points[0] + (thread_local.rng.integers(-d, d), thread_local.rng.integers(-d, d))
-        points[2] = points[0] + (thread_local.rng.integers(-d, d), thread_local.rng.integers(-d, d))
+        points[1] = points[0] + (
+            thread_local.rng.integers(-d, d),
+            thread_local.rng.integers(-d, d),
+        )
+        points[2] = points[0] + (
+            thread_local.rng.integers(-d, d),
+            thread_local.rng.integers(-d, d),
+        )
         color = Triangle.generate_color(points, focus_mode, target_pixels)
         triangle = cls(points, color)
         triangle.fix_orientation()
-        return triangle 
+        return triangle
 
     def __repr__(self):
-        points = ', '.join(f'({x}, {y})' for x, y in self.points)
+        points = ", ".join(f"({x}, {y})" for x, y in self.points)
         return f"Triangle(points={points}, color={self.color})"
 
     def fix_orientation(self):
@@ -64,12 +72,18 @@ class Triangle:
         points[1] = project_into_range(points[1], y_low, y_high)
 
     def adjust_vertices(self, focus_mode, target_pixels):
-        d = thread_local.rng.choice([10, 50], p=[0.5, 0.5]) if focus_mode else thread_local.rng.choice([50, 500], p=[0.5, 0.5])
+        d = (
+            thread_local.rng.choice([10, 50], p=[0.5, 0.5])
+            if focus_mode
+            else thread_local.rng.choice([50, 500], p=[0.5, 0.5])
+        )
         index = thread_local.rng.integers(0, 3)
         dx = thread_local.rng.integers(-d, d + 1)
         dy = thread_local.rng.integers(-d, d + 1)
         self.points[index] += (dx, dy)
-        Triangle.project_into_canvas(self.points[index], target_image.height, target_image.width)
+        Triangle.project_into_canvas(
+            self.points[index], target_image.height, target_image.width
+        )
         self.fix_orientation()
 
     @staticmethod
@@ -86,7 +100,9 @@ class Triangle:
 
     @staticmethod
     def random_points_inside_triangle(points, n):
-        return np.array([Triangle.random_point_inside_triangle(points) for _ in range(n)])
+        return np.array(
+            [Triangle.random_point_inside_triangle(points) for _ in range(n)]
+        )
 
     @staticmethod
     def average_color_of_points(points):
@@ -95,7 +111,7 @@ class Triangle:
         for i in range(n):
             colors[i] = target_image.image[points[i][1]][points[i][0]]
         average = np.average(colors, axis=0)
-        assert (average.shape == (3,))
+        assert average.shape == (3,)
         return average
 
     def average_color_of_sample(self):
@@ -103,15 +119,23 @@ class Triangle:
 
     @staticmethod
     def compute_average_color_of_sample(points):
-        rnd_points = Triangle.random_points_inside_triangle(points, TRIANGLE_SAMPLE_SIZE)
+        rnd_points = Triangle.random_points_inside_triangle(
+            points, TRIANGLE_SAMPLE_SIZE
+        )
         for i in range(TRIANGLE_SAMPLE_SIZE):
-            rnd_points[i][0] = project_into_range(rnd_points[i][0], 0, target_image.width - 1)
-            rnd_points[i][1] = project_into_range(rnd_points[i][1], 0, target_image.height - 1)
+            rnd_points[i][0] = project_into_range(
+                rnd_points[i][0], 0, target_image.width - 1
+            )
+            rnd_points[i][1] = project_into_range(
+                rnd_points[i][1], 0, target_image.height - 1
+            )
         return Triangle.average_color_of_points(rnd_points)
 
     @staticmethod
     def generate_color(points, focus_mode, target_pixels):
-        return Triangle.color_perturbation(Triangle.compute_average_color_of_sample(points), focus_mode, target_pixels)
+        return Triangle.color_perturbation(
+            Triangle.compute_average_color_of_sample(points), focus_mode, target_pixels
+        )
 
     @staticmethod
     def color_perturbation(color, focus_mode, target_pixels):
@@ -130,7 +154,10 @@ class Triangle:
             Triangle.color_perturbation(self.color, focus_mode, target_pixels)
 
     def bounding_box(self):
-        return BoundingBox((self.points[:, 0].min(), self.points[:, 1].min()), (self.points[:, 0].max(), self.points[:, 1].max()))
+        return BoundingBox(
+            (self.points[:, 0].min(), self.points[:, 1].min()),
+            (self.points[:, 0].max(), self.points[:, 1].max()),
+        )
 
     def paint(self, image, image_origin, alpha):
         height, width, _ = image.shape
@@ -149,4 +176,6 @@ class Triangle:
         cv.fillPoly(triangle_image, [vertices], self.color)
         c1 = bounding_box.corner1()
         c2 = bounding_box.corner2()
-        image[c1[1]:c2[1], c1[0]:c2[0], :] = (1 - alpha) * bounding_box.get_region_of_image(image) + alpha * triangle_image
+        image[c1[1] : c2[1], c1[0] : c2[0], :] = (
+            1 - alpha
+        ) * bounding_box.get_region_of_image(image) + alpha * triangle_image
