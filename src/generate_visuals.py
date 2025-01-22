@@ -50,6 +50,9 @@ class Visualizer:
             i += generations_per_shape
         self.generations_per_shape_weights /= self.generations_per_shape_weights.sum()
 
+    def show_params(self):
+        print(self.data.params)
+
     def draw_fitness_over_generations(self):
         fig, ax = plt.subplots()
         ax.plot(self.min_fitness, label="Min Fitness")
