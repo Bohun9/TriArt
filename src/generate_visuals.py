@@ -65,17 +65,18 @@ class Visualizer:
         fitness_diff = -np.diff(self.shape_fitness)
         batch_size = 7
         batched_diff = [
-            np.mean(fitness_diff[i : i + batch_size])
-            for i in range(0, len(fitness_diff), batch_size)
+            np.mean(fitness_diff[i - batch_size : i])
+            for i in range(batch_size, len(fitness_diff) + 1, batch_size)
         ]
         ax.plot(
+            range(batch_size, len(fitness_diff) + 1, batch_size),
             batched_diff,
             marker="o",
             markersize=3,
             label=f"(Batch Size={batch_size})",
         )
         ax.set_yscale("log")
-        ax.set_xlabel("Number of Shapes (Batch Id)")
+        ax.set_xlabel("Number of Shapes")
         ax.set_ylabel("Change in Fitness")
         ax.set_title("Consecutive Changes in Fitness Over the Number of Shapes")
         ax.legend()
@@ -97,12 +98,16 @@ class Visualizer:
         fig, ax = plt.subplots()
         batch_size = 4
         batched_avg_shape_sizes = [
-            np.mean(self.avg_shape_sizes[i : i + batch_size])
-            for i in range(0, len(self.avg_shape_sizes), batch_size)
+            np.mean(self.avg_shape_sizes[i - batch_size : i])
+            for i in range(batch_size, len(self.avg_shape_sizes) + 1, batch_size)
         ]
-        ax.plot(batched_avg_shape_sizes, label=f"(Batch Size={batch_size})")
+        ax.plot(
+            range(batch_size, len(self.avg_shape_sizes) + 1, batch_size),
+            batched_avg_shape_sizes,
+            label=f"(Batch Size={batch_size})",
+        )
         ax.set_yscale("log")
-        ax.set_xlabel("Number of Shapes (Batch Id)")
+        ax.set_xlabel("Number of Shapes")
         ax.set_ylabel("Average Area of Triangle")
         ax.set_title("Average Area of Added Triangle")
         ax.legend()
@@ -121,11 +126,15 @@ class Visualizer:
         fig, ax = plt.subplots()
         batch_size = 4
         batched_shape_times = [
-            np.mean(self.shape_times[i : i + batch_size])
-            for i in range(0, len(self.shape_times), batch_size)
+            np.mean(self.shape_times[i - batch_size : i])
+            for i in range(batch_size, len(self.shape_times) + 1, batch_size)
         ]
-        ax.plot(self.shape_times, label=f"(Batch Size={batch_size}")
-        ax.set_xlabel("Number of Shapes (Batch Id)")
+        ax.plot(
+            range(batch_size, len(self.shape_times) + 1, batch_size),
+            batched_shape_times,
+            label=f"(Batch Size={batch_size}",
+        )
+        ax.set_xlabel("Number of Shapes")
         ax.set_ylabel("Time in Seconds")
         ax.set_title("Time Per Shape")
         ax.legend()
@@ -140,11 +149,8 @@ def create_frames(target_path, run_name, frame_id=None):
 
     Path("frames/").mkdir(exist_ok=True)
 
-    print(frame_id)
-
     for (gen_index, gen_data) in tqdm(data.generations.items()):
         if gen_index >= 0 and (frame_id is None or gen_index == frame_id):
-            print(gen_index)
             painted_image = paint_shapes(gen_data.best_shapes)
             frame_path = f"frames/{data.params['save_name']}_{gen_index:05d}.png"
             cv.imwrite(frame_path, painted_image)
