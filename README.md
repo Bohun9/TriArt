@@ -10,11 +10,7 @@ It uses an evolutionary process to develop progressively better generations of i
 
 ```bash
 pip install -r requirements.txt
-sudo apt install libopencv-dev python3-opencv
 ```
-
-While OpenCV can also be installed via pip, using the system package manager is recommended to avoid potential
-[conflicts](https://stackoverflow.com/questions/46449850/how-to-fix-the-error-qobjectmovetothread-in-opencv-in-python).
 
 ### Usage
 
