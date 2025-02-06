@@ -22,6 +22,7 @@ This command will start the evolution and save the results and statistics to the
 ```bash
 python3 -m src.triart <image_path> --save_name <save_name> [options]
 ```
+To stop the program at any point, press the Escape key.
 
 For a full list of avaiable options, use:
 ```bash
